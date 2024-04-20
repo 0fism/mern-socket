@@ -1,37 +1,44 @@
-import express from "express";
-import postRoute from "./routes/post.route.js";
-import authRoute from "./routes/auth.route.js";
-import cookieParser from "cookie-parser";
-import cors from 'cors';
-import testRoute from "./routes/test.route.js";
-import userRoute from "./routes/user.route.js";
-import messageRoute from "./routes/message.route.js";
-import chatRoute from "./routes/chat.route.js";
-import envRoute from "./routes/env.route.js";
+import { Server } from "socket.io";
 
-const app = express();
+const io = new Server({
+  cors: {
+    origin: "http://localhost:5173",
+  },
+});
 
-// app.use(cors(
-//     {
-//         origin: process.env.CLIENT_URL,
-//         methods: ["POST", "GET"],
-//         credentials: true
-//     }
-// ));
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+let onlineUser = [];
 
-app.use(express.json())
-app.use(cookieParser())
+const addUser = (userId, socketId) => {
+  const userExits = onlineUser.find((user) => user.userId === userId);
+  if (!userExits) {
+    onlineUser.push({ userId, socketId });
+  }
+};
 
-app.use("/api/auth", authRoute);
-app.use("/api/users", userRoute);
-app.use("/api/test", testRoute);
-app.use("/api/posts", postRoute);
-app.use("/api/messages", messageRoute);
-app.use("/api/chats", chatRoute);
-app.use("/api/env", envRoute);
+const removeUser = (socketId) => {
+  onlineUser = onlineUser.filter((user) => user.socketId !== socketId);
+};
+
+const getUser = (userId) => {
+  return onlineUser.find((user) => user.userId === userId);
+};
 
 
-app.listen(process.env.PORT, () => {
-    console.log("Server is running on http://localhost:"+process.env.PORT);
-})
+io.on("connection", (socket) => {
+  socket.on("newUser", (userId) => {
+    addUser(userId, socket.id);
+    console.log(onlineUser)
+  });
+  // sendMessage event?
+  socket.on("sendMessage", ({ receiverId, data }) => {
+    console.log("app.js"+data);
+    const receiver = getUser(receiverId)
+    io.to(receiver.socketId).emit("getMessage", data);
+  });
+
+  socket.on("disconnect", () => {
+    removeUser(socket.id);
+  });
+});
+
+io.listen("4000");
